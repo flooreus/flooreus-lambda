@@ -1,0 +1,44 @@
+on:
+  workflow_run:
+    workflows: [CI-Main, CI-Hotfix]
+    types: [completed]
+
+env:
+  AWS_REGION: "eu-west-2"
+  ECR_ACCOUNT_ID: "793632375881"
+  ECR_REGISTRY: 793632375881.dkr.ecr.eu-west-2.amazonaws.com
+  ECR_ROLE: arn:aws:iam::793632375881:role/advanced-artefacts-gh-advancedcsg
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  BuildImageUploaderImage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      ECR_REPOSITORY: flooreus/image-uploader
+    steps:
+      - uses: actions/checkout@v4
+        name: Checkout
+
+      - name: Copy files to docker workspace
+        working-directory: webapp
+        run: |
+          Copy-Item ${{ github.workspace }}\index.html .\obj\Docker\web -Force
+          Get-ChildItem .\obj\Docker\web
+
+      - name: Build Image
+        working-directory: webapp
+        run: >
+          docker build 
+          --build-arg source=obj/Docker/web 
+          .
+
+      - name: Push image to ECR
+        working-directory: webapp
+        run: |
+          docker push ${{env.ECR_REGISTRY}}/${{env.ECR_REPOSITORY}} --all-tags
