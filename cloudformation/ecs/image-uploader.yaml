@@ -172,6 +172,8 @@ Resources:
       Family: image-uploader-ecs-task
       TaskRoleArn: !GetAtt ImageUploaderTaskExecutionRole.Arn
       ExecutionRoleArn: !GetAtt ImageUploaderTaskExecutionRole.Arn
+      RequiresCompatibilities:
+        - FARGATE
       ContainerDefinitions:
         - Name: image-uploader-ecs-container
           Image: !Ref ImageName
