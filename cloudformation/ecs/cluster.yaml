@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cluster for housing the tasks that host the image uploader application
+
+Resources:
+  ImageUploaderECSClusterKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: The key for encrypting comms between ECS cluster and containers
+      Enabled: true
+      KeyPolicy: !Sub |
+          {
+            "Version": "2012-10-17",
+            "Id": "ecs-kms-key-policy",
+            "Statement": [
+              {
+                "Sid": "Enable IAM User Permissions",
+                "Effect": "Allow",
+                "Principal": {
+                  "AWS": "arn:aws:iam::${AWS::AccountId}:root"
+                },
+                "Action": "kms:*",
+                "Resource": "*"
+              }
+            ]
+          }
+      MultiRegion: false
+      PendingWindowInDays: 7
+
+  ImageUploaderECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: image-uploader-cluster
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Configuration: 
+        ExecuteCommandConfiguration:
+          KmsKeyId: !GetAtt ImageUploaderECSClusterKMSKey.Arn
+          LogConfiguration:
+            CloudWatchLogGroupName: image-uploader-task-log
+            S3BucketName: floores-logs-bucket
+            S3EncryptionEnabled: true
+            S3KeyPrefix: image-uploader-ecs-cluster-logs
+          Logging: OVERRIDE

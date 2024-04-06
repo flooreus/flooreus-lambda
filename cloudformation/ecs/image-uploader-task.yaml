@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ECS Task Definition and Service
+
+Parameters:
+  ImageName:
+    Description: The location of the image we are deploying to the task
+    Type: String
+
+Mappings:
+  Accounts:
+    "793632375881":
+      VPCId: vpc-46a7882e
+      SubnetAId: "subnet-0a4d443244dd2ccc3"
+      SubnetBId: "subnet-09780baeb84c9e10b"
+      SubnetCId: "subnet-0d4e875d7cf2de1bd"
+
+Resources:
+  ImageUploaderTaskSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Security Group for Image Uploader ECS Task"
+      VpcId: 
+        Fn::FindInMap:
+          - Accounts
+          - !Ref AWS::AccountId
+          - VPCId
+
+  ImageUploaderTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ECSExecutionPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ecr:GetAuthorizationToken'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchGetImage'
+                Resource: '*'
+
+  ImageUploaderTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: image-uploader-ecs-task
+      TaskRoleArn: !GetAtt ImageUploaderTaskExecutionRole.Arn
+      ExecutionRoleArn: !GetAtt ImageUploaderTaskExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: image-uploader-ecs-container
+          Image: !Ref ImageName
+          Memory: 512
+          Cpu: 256
+          PortMappings:
+            - ContainerPort: 80
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: image-uploader-ecs-task-logs
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: image-uploader-ecs-task
+
+  ImageUploaderECSALBService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: image-uploader-cluster
+      ServiceName: image-uploader-ecs-service
+      TaskDefinition: !Ref ImageUploaderTaskDefinition
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - Fn::FindInMap:
+              - Accounts
+              - !Ref AWS::AccountId
+              - SubnetAId
+            - Fn::FindInMap:
+              - Accounts
+              - !Ref AWS::AccountId
+              - SubnetBId
+            - Fn::FindInMap:
+              - Accounts
+              - !Ref AWS::AccountId
+              - SubnetCId
+          SecurityGroups:
+            - !Ref ImageUploaderTaskSecurityGroup
+          AssignPublicIp: DISABLED
+
+Outputs:
+  TaskDefinitionArn:
+    Value: !Ref ImageUploaderTaskDefinition
+    Description: ARN of the ECS Task Definition

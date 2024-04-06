@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Uploader</title>
+</head>
+<body>
+    <h1>Image Uploader</h1>
+    <input type="file" id="fileInput" accept="image/*">
+    <button onclick="uploadImage()">Upload Image</button>
+    <div id="status"></div>
+
+    <script>
+        function uploadImage() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select an image file.');
+                return;
+            }
+
+            const bucketName = 'floores-image-bucket';
+            const region = 'eu-west-2';
+            const IdentityPoolId = 'your-identity-pool-id';
+
+            AWS.config.update({
+                region: region,
+                credentials: new AWS.CognitoIdentityCredentials({
+                    IdentityPoolId: IdentityPoolId
+                })
+            });
+
+            const s3 = new AWS.S3({
+                apiVersion: '2006-03-01',
+                params: { Bucket: bucketName }
+            });
+
+            const params = {
+                Key: file.name,
+                Body: file,
+                ACL: 'private'
+            };
+
+            s3.upload(params, function(err, data) {
+                if (err) {
+                    console.error(err);
+                    document.getElementById('status').innerHTML = 'Error uploading image: ' + err.message;
+                } else {
+                    console.log('Successfully uploaded image:', data.Location);
+                    document.getElementById('status').innerHTML = 'Image uploaded successfully. <a href="' + data.Location + '">View Image</a>';
+                }
+            });
+        }
+    </script>
+</body>
+</html>
