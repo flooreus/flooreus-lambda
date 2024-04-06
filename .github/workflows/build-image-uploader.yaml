@@ -7,7 +7,8 @@ env:
   AWS_REGION: "eu-west-2"
   ECR_ACCOUNT_ID: "793632375881"
   ECR_REGISTRY: 793632375881.dkr.ecr.eu-west-2.amazonaws.com
-  ECR_ROLE: arn:aws:iam::793632375881:role/advanced-artefacts-gh-advancedcsg
+  ECR_REPOSITORY: flooreus/image-uploader
+  ECR_ROLE: 
 
 permissions:
   id-token: write
@@ -19,8 +20,6 @@ jobs:
     permissions:
       contents: read
       actions: read
-    env:
-      ECR_REPOSITORY: flooreus/image-uploader
     steps:
       - uses: actions/checkout@v4
         name: Checkout

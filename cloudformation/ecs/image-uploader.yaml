@@ -24,6 +24,12 @@ Resources:
           - Accounts
           - !Ref AWS::AccountId
           - VPCId
+      SecurityGroupIngress:
+        - Description: Enable access from ALB to service
+          FromPort: 80
+          ToPort: 80
+          IpProtocol: tcp
+          SourceSecurityGroupId: !ImportValue ImageUploaderALBSecurityGroupArn
 
   ImageUploaderTaskExecutionRole:
     Type: AWS::IAM::Role
@@ -94,6 +100,7 @@ Resources:
           SecurityGroups:
             - !Ref ImageUploaderTaskSecurityGroup
           AssignPublicIp: DISABLED
+
 
 Outputs:
   TaskDefinitionArn:
