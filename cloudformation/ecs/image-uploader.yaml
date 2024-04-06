@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: ECS Task Definition and Service
+Description: Cluster for housing the tasks that host the image uploader application
 
 Parameters:
   ImageName:
@@ -15,6 +15,118 @@ Mappings:
       SubnetCId: "subnet-0d4e875d7cf2de1bd"
 
 Resources:
+  ImageUploaderECSClusterKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: The key for encrypting comms between ECS cluster and containers
+      Enabled: true
+      KeyPolicy: !Sub |
+          {
+            "Version": "2012-10-17",
+            "Id": "ecs-kms-key-policy",
+            "Statement": [
+              {
+                "Sid": "Enable IAM User Permissions",
+                "Effect": "Allow",
+                "Principal": {
+                  "AWS": "arn:aws:iam::${AWS::AccountId}:root"
+                },
+                "Action": "kms:*",
+                "Resource": "*"
+              }
+            ]
+          }
+      MultiRegion: false
+      PendingWindowInDays: 7
+
+  ImageUploaderECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: image-uploader-cluster
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+      Configuration: 
+        ExecuteCommandConfiguration:
+          KmsKeyId: !GetAtt ImageUploaderECSClusterKMSKey.Arn
+          LogConfiguration:
+            CloudWatchLogGroupName: image-uploader-task-log
+            S3BucketName: floores-logs-bucket
+            S3EncryptionEnabled: true
+            S3KeyPrefix: image-uploader-ecs-cluster-logs
+          Logging: OVERRIDE
+
+  ImageUploaderECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: flooreus/image-uploader
+      EmptyOnDelete: true
+
+  ImageUploaderALBSecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Security Group for Image Uploader load balancer"
+      VpcId: 
+        Fn::FindInMap:
+          - Accounts
+          - !Ref AWS::AccountId
+          - VPCId
+
+  ImageUploaderALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: my-alb
+      Subnets: 
+        - Fn::FindInMap:
+          - Accounts
+          - !Ref AWS::AccountId
+          - SubnetAId
+        - Fn::FindInMap:
+          - Accounts
+          - !Ref AWS::AccountId
+          - SubnetBId
+        - Fn::FindInMap:
+          - Accounts
+          - !Ref AWS::AccountId
+          - SubnetCId
+      SecurityGroups: 
+        - !Ref ImageUploaderALBSecurityGroup
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      
+  ImageUploaderALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ImageUploaderTargetGroup
+      LoadBalancerArn: !Ref ImageUploaderALB
+      Port: 443
+      Protocol: HTTP
+      SslPolicy: ELBSecurityPolicy-2016-08
+      
+  ImageUploaderTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 4
+      Matcher:
+        HttpCode: 200
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 3
+      VpcId:
+        Fn::FindInMap:
+          - Accounts
+          - !Ref AWS::AccountId
+          - VPCId
+
   ImageUploaderTaskSecurityGroup:
     Type: "AWS::EC2::SecurityGroup"
     Properties:
@@ -29,7 +141,7 @@ Resources:
           FromPort: 80
           ToPort: 80
           IpProtocol: tcp
-          SourceSecurityGroupId: !ImportValue ImageUploaderALBSecurityGroupArn
+          SourceSecurityGroupId: !Ref ImageUploaderALBSecurityGroup
 
   ImageUploaderTaskExecutionRole:
     Type: AWS::IAM::Role
@@ -100,9 +212,3 @@ Resources:
           SecurityGroups:
             - !Ref ImageUploaderTaskSecurityGroup
           AssignPublicIp: DISABLED
-
-
-Outputs:
-  TaskDefinitionArn:
-    Value: !Ref ImageUploaderTaskDefinition
-    Description: ARN of the ECS Task Definition
